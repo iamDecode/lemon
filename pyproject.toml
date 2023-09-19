@@ -1,0 +1,31 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lemon-explainer"
+version = "0.0.1"
+authors = [
+  { name="Dennis Collaris", email="d.collaris@me.com" },
+]
+description = "Explaining the predictions of any machine learning model"
+readme = "README.md"
+requires-python = ">=3.7"
+license = "BSD-2-Clause"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Software Development",
+    "Topic :: Scientific/Engineering"
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "matplotlib"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/iamDecode/lemon"

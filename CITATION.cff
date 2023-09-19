@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it using these metadata.
+title: LEMON: Alternative Sampling for More Faithful Explanation Through Local Surrogate Models
+abstract: Local surrogate learning is a popular and successful method for machine learning explanation. It uses synthetic transfer data to approximate a complex reference model. The sampling technique used for this transfer data has a significant impact on the provided explanation, but remains relatively unexplored in literature. In this work, we explore alternative sampling techniques in pursuit of more faithful and robust explanations, and present LEMON: a sampling technique that samples directly from the desired distribution instead of reweighting samples as done in other explanation techniques (e.g., LIME). Next, we evaluate our technique in a synthetic and UCI dataset-based experiment, and show that our sampling technique yields more faithful explanations compared to current state-of-the-art explainers.
+authors:
+  - family-names: Collaris
+    given-names: Dennis
+    orcid: "https://orcid.org/0000-0001-7612-9319"
+  - family-names: Gajane
+    given-names: Pratik
+    orcid: "http://orcid.org/0000-0002-8087-5661"
+  - family-names: Jorritsma
+    given-names: Joost
+    orcid: "http://orcid.org/0000-0002-1669-9253"
+  - family-names: van Wijk
+    given-names: Jarke J.
+    orcid: "https://orcid.org/0000-0002-5128-976X"
+  - family-names: Pechenizkiy
+    given-names: Mykola
+    orcid: "http://orcid.org/0000-0003-4955-0743"
+doi: 10.1007/978-3-031-30047-9_7
+date-released: 2023-09-08
+license: BSD-2-Clause
