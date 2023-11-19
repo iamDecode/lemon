@@ -4,7 +4,8 @@ from sklearn.preprocessing import normalize
 from bisect import bisect
 from sklearn.linear_model import Ridge
 from sklearn.utils import check_random_state
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.pipeline import make_pipeline
 
 from .explanation import Explanation
 from .kernels import uniform_kernel
@@ -58,6 +59,7 @@ class LemonExplainer(object):
       distance_kernel = uniform_kernel
   
     self.sampling_kernel = self._transform(distance_kernel, dimensions, radius_max=radius_max)
+    self.sample_size = sample_size
 
     # Create hypersphere samples. The sphere is only computed once for performance and stability,
     # alternatively we can resample the sphere every time `explain_instance` is called, but this
@@ -77,8 +79,22 @@ class LemonExplainer(object):
     try:
       return self._surrogate
     except AttributeError:
-      self._surrogate = Ridge(fit_intercept=True, random_state=self.random_state)
+      self._surrogate = Ridge(alpha=self.sample_size, fit_intercept=True, random_state=self.random_state)
       return self._surrogate
+
+  @property
+  def pipeline(self):
+    """
+    Pipeline for applying the surrogate model on scaled data.
+
+    Without scaling, the feature contribution is biased towards features with higher values.
+
+    """
+    try:
+      return self._pipeline
+    except AttributeError:
+      self._pipeline = make_pipeline(MinMaxScaler(), self.surrogate)
+      return self._pipeline
 
   def explain_instance(self, instance, predict_fn, labels=None, surrogate=None):
     """
@@ -102,7 +118,8 @@ class LemonExplainer(object):
         feature-wise coefficients in `surrogate.coef_`.
     
     """
-    surrogate = surrogate or self.surrogate
+    if surrogate is not None:
+      self._surrogate = surrogate
   
     # Create transfer dataset by perturbing the original instance with the hypersphere samples
     X_transfer = self.scaler.inverse_transform(self.sphere) + np.array(instance).reshape(1,-1)
@@ -120,13 +137,13 @@ class LemonExplainer(object):
       labels = (prediction_index,)
 
     def explain_label(label):
-      surrogate.fit(X_transfer, y_transfer[:,label])
+      self.pipeline.fit(X_transfer, y_transfer[:,label])
       certainty = prediction[:,label]
-      score = surrogate.score(X_transfer, y_transfer[:,label])
+      score = self.pipeline.score(X_transfer, y_transfer[:,label])
 
       return Explanation(
         instance,
-        surrogate,
+        self.surrogate,
         label=label,
         label_certainty=certainty,
         local_faithfulness=score

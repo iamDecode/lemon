@@ -138,7 +138,7 @@ class TestExplainer(TestCase):
   def test_explain_instance(self):
     explainer = LemonExplainer(self.X, random_state=random_state)
 
-    rf_fi = self.clf.feature_importances_.reshape(1, -1)
+    rf_fi = self.clf.feature_importances_
 
     lemon_fi = np.mean([
       explainer.explain_instance(instance, self.clf.predict_proba)[0].feature_contribution
@@ -148,7 +148,39 @@ class TestExplainer(TestCase):
     lemon_fi = np.abs(lemon_fi)
 
     # Mean important features should be roughly proportional to random forest feature importance
-    assert np.allclose(rf_fi, lemon_fi, rtol=0.1, atol=0.1)
+    assert(np.array_equal(np.argsort(rf_fi), np.argsort(lemon_fi)))
+
+  def test_explain_instance_scaling_invariant(self):
+    # Unscaled
+    explainer = LemonExplainer(self.X, random_state=random_state)
+
+    lemon_fi = np.mean([
+      explainer.explain_instance(instance, self.clf.predict_proba)[0].feature_contribution
+      for _, instance in self.X.iterrows()
+    ], axis=0)
+    lemon_fi /= np.sum(np.abs(lemon_fi))
+    lemon_fi = np.abs(lemon_fi)
+    
+    # Scaled
+    data = load_iris(as_frame=True)
+    X_scaled = data.data
+    X_scaled.loc[:, 'petal width (cm)'] *= 1000
+    y = pd.Series(np.array(data.target_names)[data.target])
+    y.name = "Class"
+
+    clf_scaled = RandomForestClassifier(random_state=random_state)
+    clf_scaled.fit(X_scaled, y)
+    explainer_scaled = LemonExplainer(X_scaled, random_state=random_state)
+
+    lemon_fi_scaled = np.mean([
+      explainer_scaled.explain_instance(instance, clf_scaled.predict_proba)[0].feature_contribution
+      for _, instance in X_scaled.iterrows()
+    ], axis=0)
+    lemon_fi_scaled /= np.sum(np.abs(lemon_fi_scaled))
+    lemon_fi_scaled = np.abs(lemon_fi_scaled)
+
+    # Scaling features should have have no effect on which feature is most important
+    assert np.allclose(lemon_fi, lemon_fi_scaled, rtol=0.01, atol=0.01)
 
   def test_explain_instance2(self):
     explainer = LemonExplainer(self.X, random_state=random_state)
