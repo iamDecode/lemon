@@ -24,6 +24,10 @@ class LemonExplainer(object):
       list of indices corresponding to the categorical columns. Everything else will be considered
       continuous. Values in these columns MUST be integers.
 
+  training_data_stats: {str: float | dict}
+      a dict object having the details of training data statistics. For numerical features, this
+      describes the standard deviation, for categorical features the frequencies of each category.
+
   sample_size: int
       Number of samples to generate to train the surrogate model on. More sample means a 
       more faithful explanation, but longer running time.
@@ -44,8 +48,9 @@ class LemonExplainer(object):
   """
   def __init__(
       self, 
-      training_data,
+      training_data=None,
       categorical_features=[], 
+      training_data_stats={},
       sample_size=5000, 
       distance_kernel=None, 
       radius_max=1, 
@@ -54,18 +59,33 @@ class LemonExplainer(object):
     self.random_state = check_random_state(random_state)
     np.random.seed(random_state)
 
-    self.training_data = training_data
     self.categorical_features = categorical_features
+
+    if training_data is None and len(training_data_stats) > 0:
+      self.training_data = pd.DataFrame([], columns=list(training_data_stats.keys()))
+      self.scaler = StandardScaler(with_mean=False)
+      self.scaler.scale_ = [
+        x for i, x in enumerate(training_data_stats.values())
+        if i not in categorical_features
+      ]
+      self.scaler.mean_ = [
+        0 for i, _ in enumerate(training_data_stats.values())
+        if i not in categorical_features
+      ]
+
+      dimensions = len(training_data_stats)
+    else:
+      self.training_data = training_data
+
+      self.scaler = StandardScaler(with_mean=False)
+      self.scaler.fit(np.asanyarray(training_data)[:, np.setdiff1d(np.arange(training_data.shape[1]), categorical_features)])
+      
+      training_data_stats = {
+        training_data.columns[i]: dict(zip(*np.unique(training_data.iloc[:, i], return_counts=True)))
+        for i in categorical_features
+      }
     
-    self.scaler = StandardScaler(with_mean=False)
-    self.scaler.fit(np.asanyarray(training_data)[:, np.setdiff1d(np.arange(training_data.shape[1]), categorical_features)])
-    
-    training_data_stats = {
-      i: dict(zip(*np.unique(training_data.iloc[:, i], return_counts=True)))
-      for i in categorical_features
-    }
-    
-    dimensions = training_data.shape[1]
+      dimensions = training_data.shape[1]
 
     n_categorical = len(categorical_features)
     n_numerical = dimensions - n_categorical
@@ -205,7 +225,7 @@ class LemonExplainer(object):
         list of indices corresponding to the categorical columns. Everything else will be considered
         continuous. Values in these columns MUST be integers.
 
-    training_data_stats: {int: dict}
+    training_data_stats: {str: float | dict}
         a dict object having the details of training data statistics. For this method, only info
         about the categorical features is used: the frequencies of each category.
 
@@ -215,7 +235,7 @@ class LemonExplainer(object):
     sphere *= self.sampling_kernel(np.random.uniform(size=sample_size)).reshape(-1,1)
 
     for index in categorical_features:
-      descriptor = training_data_stats[index]
+      descriptor = training_data_stats[self.training_data.columns[index]]
       categories = list(descriptor.keys())
       frequencies = np.array(list(descriptor.values()))
       values = self.random_state.choice(categories, size=sample_size, replace=True, p=frequencies / float(sum(frequencies)))

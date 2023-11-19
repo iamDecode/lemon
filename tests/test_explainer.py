@@ -227,3 +227,15 @@ class TestExplainerCategorical(TestCase):
     exp = explainer.explain_instance(instance, self.clf.predict_proba)[0]
 
     exp.show_in_notebook()
+
+  def test_explain_instance_without_training_data(self):
+    stats = {
+      column: dict(zip(*np.unique(self.X[column], return_counts=True))) if i in self.categorical_features else self.X[column].std(ddof=0)
+      for i, column in enumerate(self.X.columns)
+    } 
+    explainer = LemonExplainer(training_data_stats=stats, radius_max=0.5, categorical_features=self.categorical_features, random_state=random_state)
+
+    instance = self.X.iloc[120, :]
+    exp = explainer.explain_instance(instance, self.clf.predict_proba)[0]
+
+    exp.show_in_notebook()
