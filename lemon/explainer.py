@@ -75,7 +75,7 @@ class LemonExplainer(object):
     
     """
     try:
-      return self._surrgate
+      return self._surrogate
     except AttributeError:
       self._surrogate = Ridge(fit_intercept=True, random_state=self.random_state)
       return self._surrogate
