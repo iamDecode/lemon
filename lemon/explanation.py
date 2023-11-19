@@ -73,6 +73,7 @@ class Explanation(object):
       feature_contribution /= np.sum(np.abs(feature_contribution))
       
     contribution = pd.Series(feature_contribution, index=self.instance.index)
+    contribution = contribution.iloc[contribution.abs().argsort()]
     fig, _ = plt.subplots()
     contribution.plot.barh(
       color=['#ff5a42' if c < 0 else '#007cff' for c in contribution],
