@@ -4,8 +4,11 @@ import pandas as pd
 from scipy.stats import ks_1samp, uniform, truncnorm
 from lemon import LemonExplainer
 from lemon.kernels import uniform_kernel, gaussian_kernel
-from sklearn.datasets import load_iris
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.compose import make_column_selector, make_column_transformer
+from sklearn.datasets import load_iris, load_wine
+from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import OrdinalEncoder
 from scipy.special import gammainccinv
 from functools import partial
 
@@ -182,12 +185,45 @@ class TestExplainer(TestCase):
     # Scaling features should have have no effect on which feature is most important
     assert np.allclose(lemon_fi, lemon_fi_scaled, rtol=0.01, atol=0.01)
 
-  def test_explain_instance2(self):
+  def test_explain_instance_plot(self):
     explainer = LemonExplainer(self.X, random_state=random_state)
 
-    rf_fi = self.clf.feature_importances_.reshape(1, -1)
-
     instance = self.X.iloc[-1, :]
+    exp = explainer.explain_instance(instance, self.clf.predict_proba)[0]
+
+    exp.show_in_notebook()
+
+class TestExplainerCategorical(TestCase):
+  def setUp(self):
+    data = load_wine(as_frame=True)
+    X = data.data
+    X.loc[:, 'ash'] = pd.cut(X.loc[:, 'ash'], 4)
+    y = pd.Series(np.array(data.target_names)[data.target])
+    y.name = "Class"
+
+    self.categorical_features = [2]
+    ordinal_encoder = make_column_transformer(
+      (
+        OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=np.nan),
+        make_column_selector(dtype_include="category"),
+      ),
+      remainder="passthrough",
+      verbose_feature_names_out=False,
+    )
+
+    clf = make_pipeline(
+      ordinal_encoder, HistGradientBoostingClassifier(categorical_features=self.categorical_features, random_state=random_state)
+    )
+    clf.fit(X, y)
+
+    self.X = X
+    self.y = y
+    self.clf = clf
+
+  def test_explain_instance_plot(self):
+    explainer = LemonExplainer(self.X, radius_max=0.5, categorical_features=self.categorical_features, random_state=random_state)
+
+    instance = self.X.iloc[120, :]
     exp = explainer.explain_instance(instance, self.clf.predict_proba)[0]
 
     exp.show_in_notebook()

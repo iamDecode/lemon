@@ -20,6 +20,10 @@ class LemonExplainer(object):
   training_data : numpy.array
       Original training data the reference model (model to be explained) was trained on.
 
+  categorical_features : list
+      list of indices corresponding to the categorical columns. Everything else will be considered
+      continuous. Values in these columns MUST be integers.
+
   sample_size: int
       Number of samples to generate to train the surrogate model on. More sample means a 
       more faithful explanation, but longer running time.
@@ -40,7 +44,8 @@ class LemonExplainer(object):
   """
   def __init__(
       self, 
-      training_data, 
+      training_data,
+      categorical_features=[], 
       sample_size=5000, 
       distance_kernel=None, 
       radius_max=1, 
@@ -50,22 +55,32 @@ class LemonExplainer(object):
     np.random.seed(random_state)
 
     self.training_data = training_data
+    self.categorical_features = categorical_features
+    
     self.scaler = StandardScaler(with_mean=False)
-    self.scaler.fit(training_data)
+    self.scaler.fit(np.asanyarray(training_data)[:, np.setdiff1d(np.arange(training_data.shape[1]), categorical_features)])
+    
+    training_data_stats = {
+      i: dict(zip(*np.unique(training_data.iloc[:, i], return_counts=True)))
+      for i in categorical_features
+    }
     
     dimensions = training_data.shape[1]
+
+    n_categorical = len(categorical_features)
+    n_numerical = dimensions - n_categorical
 
     if distance_kernel is None:
       distance_kernel = uniform_kernel
   
-    self.sampling_kernel = self._transform(distance_kernel, dimensions, radius_max=radius_max)
+    self.sampling_kernel = self._transform(distance_kernel, n_numerical, radius_max=radius_max)
     self.sample_size = sample_size
 
     # Create hypersphere samples. The sphere is only computed once for performance and stability,
     # alternatively we can resample the sphere every time `explain_instance` is called, but this
     # affects running time. My preliminary tests indicate not resampling every time does not 
     # practically affect the resulting explanation much.
-    self.sphere = self._sample_hypersphere(sample_size, dimensions)
+    self.sphere = self._sample_hypersphere(sample_size, n_numerical, categorical_features, training_data_stats)
 
   @property
   def surrogate(self):
@@ -122,8 +137,7 @@ class LemonExplainer(object):
       self._surrogate = surrogate
   
     # Create transfer dataset by perturbing the original instance with the hypersphere samples
-    X_transfer = self.scaler.inverse_transform(self.sphere) + np.array(instance).reshape(1,-1)
-    
+    X_transfer = self._samples_around(instance, self.categorical_features)
     
     if isinstance(self.training_data, pd.DataFrame):
       prediction = predict_fn(pd.DataFrame(instance).T)
@@ -135,6 +149,10 @@ class LemonExplainer(object):
     if labels is None:
       prediction_index = np.argmax(prediction)
       labels = (prediction_index,)
+
+    for index in self.categorical_features:
+      # single one-hot encoded feature for categorical
+      X_transfer[:,index] = (X_transfer[:,index] == instance.values[index]).astype(int)
 
     def explain_label(label):
       self.pipeline.fit(X_transfer, y_transfer[:,label])
@@ -150,8 +168,23 @@ class LemonExplainer(object):
       )
 
     return [explain_label(label) for label in labels]
+  
+  def _samples_around(self, instance, categorical_features):
+    instance = np.array(instance).reshape(1,-1)
+    
+    if categorical_features is not None:
+      numeric_idx = [i for i in range(instance.shape[1]) if i not in categorical_features]
+      sphere = np.copy(self.sphere)
+      sphere[:, numeric_idx] = self.scaler.inverse_transform(sphere[:, numeric_idx])
+      sphere[:, numeric_idx] = sphere[:, numeric_idx].astype('float') + instance[:, numeric_idx]
+      X_transfer = sphere
+    else:
+      numeric_idx = [i for i in range(instance.shape[1])]
+      X_transfer = self.scaler.inverse_transform(self.sphere) + instance
 
-  def _sample_hypersphere(self, sample_size, dimensions):
+    return X_transfer
+
+  def _sample_hypersphere(self, sample_size, n_numerical, categorical_features=[], training_data_stats={}):
     """
     Sample from `distance_kernel`-distributed hypersphere.
 
@@ -165,17 +198,32 @@ class LemonExplainer(object):
         Number of samples to generate to train the surrogate model on. More sample means a 
         more faithful explanation, but longer running time.
 
-    dimensions: int
-        Number of features, equal to the number of features in the original training dataset.
+    n_numerical: int
+        Number of numerical features, equal to the number of numerical features in the original training dataset.
+
+    categorical_features : list
+        list of indices corresponding to the categorical columns. Everything else will be considered
+        continuous. Values in these columns MUST be integers.
+
+    training_data_stats: {int: dict}
+        a dict object having the details of training data statistics. For this method, only info
+        about the categorical features is used: the frequencies of each category.
 
     """
-    sphere = np.random.normal(size=(sample_size, dimensions))
+    sphere = np.random.normal(size=(sample_size, n_numerical))
     sphere = normalize(sphere)
     sphere *= self.sampling_kernel(np.random.uniform(size=sample_size)).reshape(-1,1)
-    
+
+    for index in categorical_features:
+      descriptor = training_data_stats[index]
+      categories = list(descriptor.keys())
+      frequencies = np.array(list(descriptor.values()))
+      values = self.random_state.choice(categories, size=sample_size, replace=True, p=frequencies / float(sum(frequencies)))
+      sphere = np.c_[sphere[:,0:index], values, sphere[:, index:]]
+
     return sphere
   
-  def _transform(self, kernel, dimensions, sample_size=5000, radius_max=1, adjust=True): 
+  def _transform(self, kernel, n_numerical, sample_size=5000, radius_max=1, adjust=True): 
     """
     Inverse transform sampling
     
@@ -187,8 +235,8 @@ class LemonExplainer(object):
     kernel: callable
         Original PDF to sample from.
 
-    dimensions: int
-        Number of dimensions to adjust for hypersphere sampling.
+    n_numerical: int
+        Number of (numerical) dimensions to adjust for hypersphere sampling.
 
     sample_size: int
         Number of samples to invert the distribution function.
@@ -200,7 +248,7 @@ class LemonExplainer(object):
 
     """
     if adjust:
-      pdf = lambda x: kernel(x) * (x ** (dimensions - 1))
+      pdf = lambda x: kernel(x) * (x ** (n_numerical - 1))
     else:
       pdf = lambda x: float(kernel(x))
 
