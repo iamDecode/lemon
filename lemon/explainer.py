@@ -166,9 +166,19 @@ class LemonExplainer(object):
       prediction = predict_fn(np.array(instance).reshape(1,-1))
       y_transfer = predict_fn(X_transfer)
 
+    if y_transfer.ndim==1: # Single-output model
+      prediction = prediction[..., None]
+      y_transfer = y_transfer[..., None]
+
+    # infer model type
     if labels is None:
-      prediction_index = np.argmax(prediction)
-      labels = (prediction_index,)
+      if prediction.sum()==1:
+        # outputs probabilities: classification model, explain predicted class
+        prediction_index = np.argmax(prediction)
+        labels = (prediction_index,)
+      else:
+        # other: (multi-output) regression, explain all targets
+        labels = tuple([*np.arange(prediction.shape[-1])])
 
     for index in self.categorical_features:
       # single one-hot encoded feature for categorical
