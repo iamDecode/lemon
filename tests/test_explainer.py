@@ -5,10 +5,12 @@ from scipy.stats import ks_1samp, uniform, truncnorm
 from lemon import LemonExplainer
 from lemon.kernels import uniform_kernel, gaussian_kernel
 from sklearn.compose import make_column_selector, make_column_transformer
-from sklearn.datasets import load_iris, load_wine
+from sklearn.datasets import load_iris, load_wine, load_linnerud
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.multioutput import MultiOutputRegressor
+from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import OrdinalEncoder
+from sklearn.preprocessing import OrdinalEncoder, StandardScaler
 from scipy.special import gammainccinv
 from functools import partial
 
@@ -237,5 +239,39 @@ class TestExplainerCategorical(TestCase):
 
     instance = self.X.iloc[120, :]
     exp = explainer.explain_instance(instance, self.clf.predict_proba)[0]
+
+    exp.show_in_notebook()
+ 
+class TestExplainerRegression(TestCase):
+  def setUp(self):
+    data = load_linnerud(as_frame=True)
+    X = data.data
+    y = data.target
+    y.name = "Target"
+      
+    regr = make_pipeline(StandardScaler(), MultiOutputRegressor(LinearRegression()))
+    regr.fit(X, y)
+
+    self.X = X
+    self.y = y
+    self.regr = regr
+
+  def test_explain_instance_plot(self):
+    explainer = LemonExplainer(self.X, radius_max=0.5, random_state=random_state)
+
+    instance = self.X.iloc[10, :]
+    exp = explainer.explain_instance(instance, self.regr.predict)[0]
+
+    exp.show_in_notebook()
+
+  def test_explain_instance_without_training_data(self):
+    stats = {
+      column: self.X[column].std(ddof=0)
+      for i, column in enumerate(self.X.columns)
+    } 
+    explainer = LemonExplainer(training_data_stats=stats, radius_max=0.5, random_state=random_state)
+
+    instance = self.X.iloc[10, :]
+    exp = explainer.explain_instance(instance, self.regr.predict)[0]
 
     exp.show_in_notebook()
