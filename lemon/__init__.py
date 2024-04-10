@@ -6,8 +6,8 @@ __all__ = [
     'LemonExplainer'
     'Explanation',
 
-    'uniform_kernel', 
-    'trapezoid_kernel', 
-    'gaussian_kernel', 
+    'uniform_kernel',
+    'trapezoid_kernel',
+    'gaussian_kernel',
     'sqcos_kernel'
 ]
