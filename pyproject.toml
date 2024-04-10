@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lemon-explainer"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
   { name="Dennis Collaris", email="d.collaris@me.com" },
 ]
